@@ -1,0 +1,128 @@
+- name: Set OCI BV Performance
+  hosts: localhost
+  vars:
+    - curr_date: "{{ansible_date_time.year}}_{{ansible_date_time.month}}_{{ansible_date_time.day}}"
+    - curr_datetime: "{{ansible_date_time.year}}_{{ansible_date_time.month}}_{{ansible_date_time.day}}_{{ansible_date_time.hour}}{{ansible_date_time.minute}}{{ansible_date_time.second}}"
+    - ansible_python_interpreter: /opt/rh/rh-python38/root/usr/bin/python3
+    - vol_id: []
+    - cmp_id: "ocid1.compartment.oc1..aaaaaaaah3xhg4axbpl7oi75sx3yplnf53k7jefbp6irz5i3d4bpbkut6a7q"
+    - debug_out: "no"
+  collections:
+    - oracle.oci
+  tasks:
+    - name: Get OCI Instance
+      oci_compute_instance_facts:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        display_name: "{{ hostname }}"
+      register: oci_instances
+    - name: Print Instance
+      debug:
+        msg: "{{ item }}"
+      loop: "{{ oci_instances.instances }}"
+      when: "{{ debug_out == 'yes' }}"
+    - name: Set instance id
+      set_fact:
+        instance_id: "{{ item.id }}"
+      loop: "{{ oci_instances.instances }}"
+    - name: Set instance tier type
+      set_fact:
+        lms_tier: "{{ item.defined_tags.ResourceLabelsLMS.LMSTier }}"
+      loop: "{{ oci_instances.instances }}"
+    - name: Print tier type
+      debug:
+        msg: "{{ lms_tier }}"
+      when: "{{ debug_out == 'yes' }}"
+    - name: Get volume attachments oci
+      oci_compute_volume_attachment_facts:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        instance_id: "{{ instance_id }}"
+      register: vol_attachments
+    - name: Print vol attachments
+      debug:
+        msg: "{{ item.volume_id }}"
+      loop: "{{ vol_attachments.volume_attachments }}"
+      when: "{{ debug_out == 'yes' }}"
+    - name: List Block Volumes
+      oci_blockstorage_volume_facts:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        volume_id: "{{ item.volume_id }}"
+      register: vol_details
+      loop: "{{ vol_attachments.volume_attachments }}"
+    - name: Debug print block volumes
+      debug:
+        msg: "{{ vol_details.results }}"
+      when: "{{ debug_out == 'yes' }}"
+    - name: Set BV Performance Level Low - DB Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierLow.DatabaseTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" or item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" ) and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "Database" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "Low" }}))
+      loop: "{{ vol_details.results }}"
+    - name: Set BV Performance Level High - DB Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierHigh.DatabaseTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabelsLMS.LMSEnvironmentName == "<<ENV_NAME>>" or item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" )  and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "Database" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "High" }}))
+      loop: "{{ vol_details.results }}"
+    - name: Set BV Performance Level High - App Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierHigh.ApplicationTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" or item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" )  and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "Application" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "High" }}))
+      loop: "{{ vol_details.results }}"
+    - name: Set BV Performance Level Low - App Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierLow.ApplicationTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" or item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "<<ENV_NAME>>" )  and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "Application" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "Low" }}))
+      loop: "{{ vol_details.results }}"
+    - name: Set BV Performance Level High - NFS Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierHigh.NFSTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "Shared" )  and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "NFS" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "High" }}))
+      loop: "{{ vol_details.results }}"
+    - name: Set BV Performance Level Low - NFS Tier
+      oci_blockstorage_volume:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        state: present
+        wait_timeout: 2400
+        volume_id: "{{ item.volumes.0.id }}"
+        vpus_per_gb: "{{ item.volumes.0.defined_tags.StoragePerformanceTierLow.NFSTier }}"
+      when: (( item.volumes.0.defined_tags.ResourceLabels.EnvironmentName == "Shared" )  and ( item.volumes.0.defined_tags.ResourceLabels.Tier == "NFS" ) and ( item.volumes.0.defined_tags | length > 0 ) and ( {{ tier_perf == "Low" }}))
+      loop: "{{ vol_details.results }}"
+    - name: List Block Volumes
+      oci_blockstorage_volume_facts:
+        compartment_id: "{{ cmp_id }}"
+        config_file_location: /home/ansible/.oci/config_ansibleoci
+        volume_id: "{{ item.volume_id }}"
+      register: vol_details
+      loop: "{{ vol_attachments.volume_attachments }}"
+    - name: Debug print block volumes
+      debug:
+        msg: "{{ vol_details.results }}"
+      when: "{{ debug_out == 'yes' }}"
